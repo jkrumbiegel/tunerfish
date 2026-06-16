@@ -1,0 +1,41 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>tunerfish selftest</title>
+<pre id="out">running…</pre>
+<script type="module">
+const out = document.getElementById('out');
+try {
+  const { instance } = await WebAssembly.instantiateStreaming(fetch('tunerfish.wasm'));
+  const w = instance.exports;
+  const FS = 48000;
+  w.init(FS);
+  const f0 = 110.0;
+  const chunk = 1024;
+  const phase = [0, 0, 0, 0, 0, 0];
+  let last = null;
+  for (let off = 0; off < FS * 1.5; off += chunk) {
+    const view = new Float32Array(w.memory.buffer, w.in_ptr(), chunk);
+    for (let i = 0; i < chunk; i++) {
+      let s = 0;
+      for (let h = 1; h <= 6; h++) {
+        phase[h - 1] = (phase[h - 1] + (2 * Math.PI * f0 * h) / FS) % (2 * Math.PI);
+        s += (0.2 / h) * Math.sin(phase[h - 1]);
+      }
+      view[i] = s;
+    }
+    if (w.push_samples(chunk) > 0) {
+      last = Array.from(new Float32Array(w.memory.buffer, w.out_ptr(), w.out_len()));
+    }
+  }
+  const n = last[0];
+  const freq = last[6];
+  const cents = 1200 * Math.log2(freq / f0);
+  if (n === 1 && Math.abs(cents) < 1.5) {
+    out.textContent = `SELFTEST-PASS tracks=${n} freq=${freq.toFixed(3)} cents=${cents.toFixed(2)}`;
+  } else {
+    out.textContent = `SELFTEST-FAIL tracks=${n} freq=${freq} cents=${cents}`;
+  }
+} catch (err) {
+  out.textContent = `SELFTEST-FAIL ${err}`;
+}
+</script>

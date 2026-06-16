@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#0e1116">
+<title>tunerfish</title>
+<style>
+  :root {
+    --bg: #0e1116;
+    --panel: #171c24;
+    --line: #2a3140;
+    --text: #dfe6f0;
+    --dim: #7d8694;
+    --good: #3ddc84;
+    --warn: #f0b429;
+    --bad: #f4644e;
+    --accent: #4ea1ff;
+  }
+  * { box-sizing: border-box; touch-action: manipulation; }
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    overscroll-behavior: none;
+  }
+  body {
+    display: flex;
+    flex-direction: column;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+  header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--line);
+    flex: none;
+  }
+  header h1 {
+    font-size: 18px;
+    margin: 0;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+  header h1 span { color: var(--accent); }
+  #level {
+    width: 34px;
+    height: 6px;
+    border-radius: 3px;
+    background: var(--line);
+    overflow: hidden;
+    flex: none;
+  }
+  #levelbar {
+    height: 100%;
+    width: 0%;
+    background: var(--good);
+  }
+  .spacer { flex: 1; }
+  .a4 {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 2px;
+  }
+  .a4 button {
+    width: 40px;
+    height: 40px;
+    font-size: 20px;
+    border: none;
+    background: none;
+    color: var(--text);
+    border-radius: 8px;
+  }
+  .a4 button:active { background: var(--line); }
+  .a4 .val {
+    min-width: 54px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+    font-size: 15px;
+  }
+  .a4 .val small { color: var(--dim); display: block; font-size: 10px; }
+  #toggle {
+    height: 46px;
+    padding: 0 18px;
+    font-size: 15px;
+    font-weight: 600;
+    border: none;
+    border-radius: 10px;
+    background: var(--accent);
+    color: #06121f;
+  }
+  #toggle.running { background: var(--bad); color: #1f0606; }
+  main {
+    flex: 1;
+    position: relative;
+    min-height: 0;
+  }
+  #scope {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+  #status {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    color: var(--dim);
+    font-size: 15px;
+    padding: 24px;
+    line-height: 1.6;
+    pointer-events: none;
+  }
+</style>
+</head>
+<body>
+  <header>
+    <h1>tuner<span>fish</span></h1>
+    <div id="level"><div id="levelbar"></div></div>
+    <div class="spacer"></div>
+    <div class="a4">
+      <button id="a4down" aria-label="reference down">&minus;</button>
+      <div class="val"><span id="a4val">440</span> Hz<small>A4 reference</small></div>
+      <button id="a4up" aria-label="reference up">+</button>
+    </div>
+    <button id="toggle">Start</button>
+  </header>
+  <main>
+    <canvas id="scope"></canvas>
+    <div id="status">Tap Start and allow microphone access.<br>
+    Pluck or strum: one line appears per string.</div>
+  </main>
+  <script type="module" src="main.js"></script>
+</body>
+</html>
