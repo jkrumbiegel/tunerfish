@@ -4,7 +4,7 @@ pub mod pitch;
 pub mod tracker;
 
 use engine::{Engine, OUT_LEN};
-use std::ptr::addr_of_mut;
+use std::ptr::{addr_of, addr_of_mut};
 
 const IN_CAP: usize = 16384;
 
@@ -42,9 +42,9 @@ pub extern "C" fn out_len() -> u32 {
 #[no_mangle]
 pub extern "C" fn push_samples(n: u32) -> u32 {
     unsafe {
-        let engine = (*addr_of_mut!(ENGINE)).as_mut().expect("init not called");
+        let engine = (&mut *addr_of_mut!(ENGINE)).as_mut().expect("init not called");
         let n = (n as usize).min(IN_CAP);
-        let samples = &(*addr_of_mut!(IN_BUF))[..n];
+        let samples = std::slice::from_raw_parts(addr_of!(IN_BUF) as *const f32, n);
         let produced = engine.push(samples);
         if produced > 0 {
             engine.write_out(&mut *addr_of_mut!(OUT_BUF));
