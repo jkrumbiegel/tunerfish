@@ -10,6 +10,7 @@ pub const HOP: usize = 2048;
 const FREQ_LO: f32 = 25.0;
 const FREQ_HI: f32 = 6000.0;
 const MAX_PEAKS: usize = 64;
+const HP_CUTOFF: f32 = 38.0; // sub-sonic rumble (engine/road/HVAC) cut; below 4-string bass E
 
 #[derive(Clone, Copy, Debug)]
 pub struct Peak {
@@ -34,8 +35,50 @@ pub struct Analyzer {
     has_prev: bool,
     bin_lo: usize,
     bin_hi: usize,
+    hp: [Biquad; 2],
     pub peaks: Vec<Peak>,
     pub rms: f32,
+}
+
+/// Direct-form-I biquad; here a 2nd-order Butterworth high-pass.
+#[derive(Default)]
+struct Biquad {
+    b0: f32,
+    b1: f32,
+    b2: f32,
+    a1: f32,
+    a2: f32,
+    x1: f32,
+    x2: f32,
+    y1: f32,
+    y2: f32,
+}
+
+impl Biquad {
+    fn highpass(fs: f32, fc: f32, q: f32) -> Self {
+        let w0 = 2.0 * PI * fc / fs;
+        let (sw, cw) = w0.sin_cos();
+        let alpha = sw / (2.0 * q);
+        let a0 = 1.0 + alpha;
+        Biquad {
+            b0: (1.0 + cw) / 2.0 / a0,
+            b1: -(1.0 + cw) / a0,
+            b2: (1.0 + cw) / 2.0 / a0,
+            a1: -2.0 * cw / a0,
+            a2: (1.0 - alpha) / a0,
+            ..Default::default()
+        }
+    }
+
+    fn step(&mut self, x: f32) -> f32 {
+        let y = self.b0 * x + self.b1 * self.x1 + self.b2 * self.x2 - self.a1 * self.y1
+            - self.a2 * self.y2;
+        self.x2 = self.x1;
+        self.x1 = x;
+        self.y2 = self.y1;
+        self.y1 = y;
+        y
+    }
 }
 
 impl Analyzer {
@@ -65,6 +108,11 @@ impl Analyzer {
             has_prev: false,
             bin_lo,
             bin_hi,
+            // 4th-order Butterworth high-pass as two cascaded biquads
+            hp: [
+                Biquad::highpass(fs, HP_CUTOFF, 0.5411961),
+                Biquad::highpass(fs, HP_CUTOFF, 1.3065630),
+            ],
             peaks: Vec::with_capacity(MAX_PEAKS),
             rms: 0.0,
         }
@@ -80,7 +128,8 @@ impl Analyzer {
 
     /// Feed one sample; returns true when a new analysis frame (self.peaks) is ready.
     pub fn feed(&mut self, sample: f32) -> bool {
-        self.ring[self.wpos] = sample;
+        let hp = self.hp[0].step(sample);
+        self.ring[self.wpos] = self.hp[1].step(hp);
         self.wpos = (self.wpos + 1) % NWIN;
         self.filled = (self.filled + 1).min(NWIN);
         self.since_hop += 1;

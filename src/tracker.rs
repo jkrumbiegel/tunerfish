@@ -8,6 +8,8 @@ const DROP_SECONDS: f32 = 15.0;
 const ACTIVATE_HITS: u32 = 4;
 const HOLD_MISSES: u32 = 2;
 const DEAD_MISSES: u32 = 8;
+const JITTER_MAX: f32 = 18.0; // cents; a track this unsteady is noise, don't show it
+const JITTER_INIT: f32 = 40.0; // new tracks start "unsteady" and must prove otherwise
 const ACCEL_SIGMA: f32 = 200.0; // cents/s^2 process noise
 const VEL_DAMP: f32 = 0.9;
 const MEAS_SIGMA: f32 = 2.0; // cents, at full confidence
@@ -27,6 +29,7 @@ pub struct Track {
     pub misses: u32,
     pub last_seen: f32,
     pub born: f32,
+    jitter: f32,
 }
 
 impl Track {
@@ -35,7 +38,7 @@ impl Track {
     }
 
     pub fn active(&self) -> bool {
-        self.hits >= ACTIVATE_HITS && self.misses <= HOLD_MISSES
+        self.hits >= ACTIVATE_HITS && self.misses <= HOLD_MISSES && self.jitter < JITTER_MAX
     }
 
     fn dead(&self) -> bool {
@@ -65,6 +68,7 @@ impl Track {
         let k0 = self.p[0][0] / s;
         let k1 = self.p[1][0] / s;
         let innov = meas_cents - self.cents;
+        self.jitter = 0.7 * self.jitter + 0.3 * innov.abs();
         self.cents += k0 * innov;
         self.vel += k1 * innov;
         let [[p00, p01], [_, p11]] = self.p;
@@ -198,6 +202,7 @@ impl Bank {
                 t.conf = c.salience;
                 t.hits = ACTIVATE_HITS; // a re-pluck resumes its line immediately
                 t.misses = 0;
+                t.jitter = 0.0;
                 t.last_seen = now;
                 continue;
             }
@@ -214,6 +219,7 @@ impl Bank {
                 misses: 0,
                 last_seen: now,
                 born: now,
+                jitter: JITTER_INIT,
             });
             self.next_id += 1;
         }

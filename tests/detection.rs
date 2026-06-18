@@ -122,6 +122,23 @@ fn loud_pluck_does_not_gate_later_soft_pluck() {
 }
 
 #[test]
+fn subsonic_rumble_does_not_mask_note() {
+    use std::f32::consts::TAU;
+    let n = (2.0 * FS) as usize;
+    let note = synth(&[Pluck { freq: 110.0, amp: 0.12, onset_cents: 0.0 }], 2.0);
+    let mut samples = vec![0.0f32; n];
+    for i in 0..n {
+        let t = i as f32 / FS;
+        // strong rumble well below the 38 Hz cut, louder than the note
+        let rumble = 0.6 * (TAU * 18.0 * t).sin() + 0.5 * (TAU * 26.0 * t).sin();
+        samples[i] = rumble + note[i];
+    }
+    let e = run(&samples);
+    let (freq, _) = strongest(&e);
+    assert!(cents(freq, 110.0).abs() < 3.0, "strongest at {freq} Hz, not the note");
+}
+
+#[test]
 fn single_string_accurate_to_one_cent() {
     let samples = synth(
         &[Pluck { freq: 196.0, amp: 0.2, onset_cents: 0.0 }],
