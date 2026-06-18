@@ -2,8 +2,9 @@ use crate::analyzer::{Analyzer, HOP};
 use crate::pitch::{self, Candidate};
 use crate::tracker::Bank;
 
-const ABS_FLOOR: f32 = 5e-4; // never treat anything quieter than this as signal
-const NOISE_MULT: f32 = 3.5; // signal must exceed the learned ambient floor by this
+const ABS_FLOOR: f32 = 3e-4; // never treat anything quieter than this as signal
+const NOISE_MULT: f32 = 2.5; // signal must exceed the learned ambient floor to start
+const RELEASE_MULT: f32 = 1.3; // ...and stay detected until it falls back to this
 pub const MAX_OUT_TRACKS: usize = 16;
 pub const OUT_STRIDE: usize = 6;
 pub const OUT_HEADER: usize = 4;
@@ -16,6 +17,7 @@ pub struct Engine {
     frames: u64,
     fs: f32,
     noise_rms: f32,
+    armed: bool,
 }
 
 impl Engine {
@@ -26,7 +28,8 @@ impl Engine {
             candidates: Vec::new(),
             frames: 0,
             fs,
-            noise_rms: 1e-2, // start high; decays to the real floor within a few frames
+            noise_rms: ABS_FLOOR,
+            armed: false,
         }
     }
 
@@ -45,14 +48,22 @@ impl Engine {
             if self.analyzer.feed(s) {
                 self.frames += 1;
                 let rms = self.analyzer.rms;
-                let thresh = ABS_FLOOR.max(NOISE_MULT * self.noise_rms);
-                let signal = rms > thresh;
-                if signal {
-                    // a real note must not inflate the floor and gate itself off
-                    self.noise_rms += 0.001 * (rms - self.noise_rms).max(0.0);
+                let attack = ABS_FLOOR.max(NOISE_MULT * self.noise_rms);
+                let release = ABS_FLOOR.max(RELEASE_MULT * self.noise_rms);
+                self.armed = if self.armed { rms > release } else { rms > attack };
+
+                // the floor tracks the quiet minimum: snap down instantly, and
+                // only creep up while idle. It must never chase a sounding note,
+                // or the threshold ratchets up and gates the next note off.
+                if rms < self.noise_rms {
+                    self.noise_rms = rms;
+                } else if !self.armed {
+                    self.noise_rms += 0.02 * (rms - self.noise_rms);
+                }
+
+                if self.armed {
                     pitch::detect(&self.analyzer.peaks, &mut self.candidates);
                 } else {
-                    self.noise_rms += 0.1 * (rms - self.noise_rms);
                     self.candidates.clear();
                 }
                 self.bank.update(&self.candidates, self.time());

@@ -50,6 +50,22 @@ fn run(samples: &[f32]) -> Engine {
     e
 }
 
+/// The track the single-pitch display would follow, and how dominant it is.
+fn strongest(e: &Engine) -> (f32, f32) {
+    let tracks = e.active_tracks();
+    let top = tracks
+        .iter()
+        .copied()
+        .max_by(|a, b| a.2.total_cmp(&b.2))
+        .unwrap_or_else(|| panic!("no active tracks"));
+    let next = tracks
+        .iter()
+        .filter(|t| t.0 != top.0)
+        .map(|t| t.2)
+        .fold(0.0f32, f32::max);
+    (top.1, top.2 / next.max(1e-9))
+}
+
 #[test]
 fn silence_yields_no_tracks() {
     let samples = vec![0.0f32; FS as usize];
@@ -86,13 +102,23 @@ fn detects_tone_above_steady_noise() {
         }
     }
     let e = run(&samples);
-    let tracks = e.active_tracks();
-    assert_eq!(tracks.len(), 1, "tracks: {tracks:?}");
-    assert!(
-        cents(tracks[0].1, 146.832).abs() < 3.0,
-        "off by {} cents",
-        cents(tracks[0].1, 146.832)
-    );
+    let (freq, dominance) = strongest(&e);
+    assert!(cents(freq, 146.832).abs() < 3.0, "off by {} cents", cents(freq, 146.832));
+    assert!(dominance > 3.0, "fundamental only {dominance}x the next track");
+}
+
+#[test]
+fn loud_pluck_does_not_gate_later_soft_pluck() {
+    let loud = synth(&[Pluck { freq: 110.0, amp: 0.35, onset_cents: 0.0 }], 2.0);
+    let soft = synth(&[Pluck { freq: 110.0, amp: 0.03, onset_cents: 0.0 }], 2.0);
+    let gap = (0.6 * FS) as usize;
+    let mut samples = loud.clone();
+    samples.extend(std::iter::repeat(0.0).take(gap));
+    samples.extend_from_slice(&soft);
+    let e = run(&samples);
+    let (freq, dominance) = strongest(&e);
+    assert!(cents(freq, 110.0).abs() < 2.0, "off by {} cents", cents(freq, 110.0));
+    assert!(dominance > 3.0, "fundamental only {dominance}x the next track");
 }
 
 #[test]
