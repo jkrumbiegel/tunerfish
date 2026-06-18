@@ -2,7 +2,8 @@ use crate::analyzer::{Analyzer, HOP};
 use crate::pitch::{self, Candidate};
 use crate::tracker::Bank;
 
-const RMS_GATE: f32 = 2e-4;
+const ABS_FLOOR: f32 = 5e-4; // never treat anything quieter than this as signal
+const NOISE_MULT: f32 = 3.5; // signal must exceed the learned ambient floor by this
 pub const MAX_OUT_TRACKS: usize = 16;
 pub const OUT_STRIDE: usize = 6;
 pub const OUT_HEADER: usize = 4;
@@ -14,6 +15,7 @@ pub struct Engine {
     candidates: Vec<Candidate>,
     frames: u64,
     fs: f32,
+    noise_rms: f32,
 }
 
 impl Engine {
@@ -24,6 +26,7 @@ impl Engine {
             candidates: Vec::new(),
             frames: 0,
             fs,
+            noise_rms: 1e-2, // start high; decays to the real floor within a few frames
         }
     }
 
@@ -41,9 +44,15 @@ impl Engine {
         for &s in samples {
             if self.analyzer.feed(s) {
                 self.frames += 1;
-                if self.analyzer.rms > RMS_GATE {
+                let rms = self.analyzer.rms;
+                let thresh = ABS_FLOOR.max(NOISE_MULT * self.noise_rms);
+                let signal = rms > thresh;
+                if signal {
+                    // a real note must not inflate the floor and gate itself off
+                    self.noise_rms += 0.001 * (rms - self.noise_rms).max(0.0);
                     pitch::detect(&self.analyzer.peaks, &mut self.candidates);
                 } else {
+                    self.noise_rms += 0.1 * (rms - self.noise_rms);
                     self.candidates.clear();
                 }
                 self.bank.update(&self.candidates, self.time());

@@ -58,6 +58,44 @@ fn silence_yields_no_tracks() {
 }
 
 #[test]
+fn gate_rejects_quiet_tone() {
+    let samples = synth(
+        &[Pluck { freq: 110.0, amp: 3e-4, onset_cents: 0.0 }],
+        1.5,
+    );
+    let e = run(&samples);
+    assert_eq!(e.active_tracks().len(), 0, "tracks: {:?}", e.active_tracks());
+}
+
+#[test]
+fn detects_tone_above_steady_noise() {
+    let n = (2.0 * FS) as usize;
+    let mut rng = 99u64;
+    let mut rand = move || {
+        rng = rng.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        (rng >> 33) as f32 / (1u64 << 31) as f32 - 0.5
+    };
+    // 0.4 s of noise alone lets the floor settle, then a clear tone over it
+    let tone = synth(&[Pluck { freq: 146.832, amp: 0.06, onset_cents: 0.0 }], 1.6);
+    let mut samples = vec![0.0f32; n];
+    for i in 0..n {
+        samples[i] = rand() * 6e-3;
+        let ti = i as isize - (0.4 * FS) as isize;
+        if ti >= 0 && (ti as usize) < tone.len() {
+            samples[i] += tone[ti as usize];
+        }
+    }
+    let e = run(&samples);
+    let tracks = e.active_tracks();
+    assert_eq!(tracks.len(), 1, "tracks: {tracks:?}");
+    assert!(
+        cents(tracks[0].1, 146.832).abs() < 3.0,
+        "off by {} cents",
+        cents(tracks[0].1, 146.832)
+    );
+}
+
+#[test]
 fn single_string_accurate_to_one_cent() {
     let samples = synth(
         &[Pluck { freq: 196.0, amp: 0.2, onset_cents: 0.0 }],

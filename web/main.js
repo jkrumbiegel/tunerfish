@@ -1,5 +1,6 @@
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const HISTORY = 8; // seconds of graph
+const LEAD_FRAC = 1 / 3; // keep the leading tip this far in from the right edge
 const HOP_GAP = 0.13; // seconds without data that breaks the line
 const VIEW_HALF = 110; // cents shown above/below the centred note (~2 semitones total)
 const KEEP_SELECTED = 0.55; // hold the followed track until another is this much stronger
@@ -151,7 +152,8 @@ function draw() {
 
   const margin = 14 * dpr;
   const yOf = (c) => h / 2 - ((c - centerCents) / VIEW_HALF) * (h / 2 - margin);
-  const xOf = (t) => w - ((now - t) / HISTORY) * w;
+  const xNow = w * (1 - LEAD_FRAC);
+  const xOf = (t) => xNow - (now - t) * (xNow / HISTORY);
 
   // note gridlines; the one nearest the pitch is emphasised and turns green
   // when locked, so the target reads clearly without the view snapping
