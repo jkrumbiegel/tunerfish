@@ -70,6 +70,14 @@ impl Analyzer {
         }
     }
 
+    pub fn mags(&self) -> &[f32] {
+        &self.mags
+    }
+
+    pub fn bin_hz(&self) -> f32 {
+        self.fs / NFFT as f32
+    }
+
     /// Feed one sample; returns true when a new analysis frame (self.peaks) is ready.
     pub fn feed(&mut self, sample: f32) -> bool {
         self.ring[self.wpos] = sample;

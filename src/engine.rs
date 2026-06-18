@@ -1,10 +1,9 @@
 use crate::analyzer::{Analyzer, HOP};
-use crate::pitch::{self, Candidate};
+use crate::pitch::Candidate;
+use crate::salience::Salience;
 use crate::tracker::Bank;
 
-const ABS_FLOOR: f32 = 3e-4; // never treat anything quieter than this as signal
-const NOISE_MULT: f32 = 2.5; // signal must exceed the learned ambient floor to start
-const RELEASE_MULT: f32 = 1.3; // ...and stay detected until it falls back to this
+const RMS_FLOOR: f32 = 3e-4; // below this the input is treated as silence
 pub const MAX_OUT_TRACKS: usize = 16;
 pub const OUT_STRIDE: usize = 6;
 pub const OUT_HEADER: usize = 4;
@@ -12,24 +11,23 @@ pub const OUT_LEN: usize = OUT_HEADER + MAX_OUT_TRACKS * OUT_STRIDE;
 
 pub struct Engine {
     analyzer: Analyzer,
+    salience: Salience,
     bank: Bank,
     candidates: Vec<Candidate>,
     frames: u64,
     fs: f32,
-    noise_rms: f32,
-    armed: bool,
 }
 
 impl Engine {
     pub fn new(fs: f32) -> Self {
+        let dt = HOP as f32 / fs;
         Engine {
             analyzer: Analyzer::new(fs),
-            bank: Bank::new(HOP as f32 / fs),
+            salience: Salience::new(fs, dt),
+            bank: Bank::new(dt),
             candidates: Vec::new(),
             frames: 0,
             fs,
-            noise_rms: ABS_FLOOR,
-            armed: false,
         }
     }
 
@@ -41,29 +39,24 @@ impl Engine {
         self.analyzer.rms
     }
 
+    pub fn salience_map(&self) -> &[f32] {
+        self.salience.map()
+    }
+
     /// Returns the number of analysis frames produced by this chunk.
     pub fn push(&mut self, samples: &[f32]) -> usize {
         let mut produced = 0;
         for &s in samples {
             if self.analyzer.feed(s) {
                 self.frames += 1;
-                let rms = self.analyzer.rms;
-                let attack = ABS_FLOOR.max(NOISE_MULT * self.noise_rms);
-                let release = ABS_FLOOR.max(RELEASE_MULT * self.noise_rms);
-                self.armed = if self.armed { rms > release } else { rms > attack };
-
-                // the floor tracks the quiet minimum: snap down instantly, and
-                // only creep up while idle. It must never chase a sounding note,
-                // or the threshold ratchets up and gates the next note off.
-                if rms < self.noise_rms {
-                    self.noise_rms = rms;
-                } else if !self.armed {
-                    self.noise_rms += 0.02 * (rms - self.noise_rms);
-                }
-
-                if self.armed {
-                    pitch::detect(&self.analyzer.peaks, &mut self.candidates);
+                if self.analyzer.rms > RMS_FLOOR {
+                    self.salience.process(
+                        self.analyzer.mags(),
+                        &self.analyzer.peaks,
+                        &mut self.candidates,
+                    );
                 } else {
+                    self.salience.decay();
                     self.candidates.clear();
                 }
                 self.bank.update(&self.candidates, self.time());

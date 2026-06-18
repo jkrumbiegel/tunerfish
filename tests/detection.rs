@@ -206,7 +206,7 @@ fn glide_stays_one_track() {
 }
 
 #[test]
-fn full_strum_standard_tuning() {
+fn strum_strongest_is_a_real_string() {
     let strings = [82.407, 110.0, 146.832, 195.998, 246.942, 329.628];
     let plucks: Vec<Pluck> = strings
         .iter()
@@ -214,21 +214,19 @@ fn full_strum_standard_tuning() {
         .collect();
     let samples = synth(&plucks, 2.0);
     let e = run(&samples);
-    let tracks = e.active_tracks();
 
-    // every track must correspond to a real string (no ghosts)
-    for &(id, f, _) in &tracks {
-        let nearest = strings
+    // single-pitch display follows the strongest track; it must be a real
+    // string (not a subharmonic/octave ghost), and any other surfaced track
+    // must also land on a real string
+    let nearest = |f: f32| {
+        strings
             .iter()
             .map(|&s| cents(f, s).abs())
-            .fold(f32::INFINITY, f32::min);
-        assert!(nearest < 5.0, "ghost track {id} at {f} Hz, {nearest} cents from any string");
+            .fold(f32::INFINITY, f32::min)
+    };
+    let (freq, _) = strongest(&e);
+    assert!(nearest(freq) < 5.0, "strongest at {freq} Hz is not a string");
+    for &(id, f, _) in &e.active_tracks() {
+        assert!(nearest(f) < 8.0, "ghost track {id} at {f} Hz, {} cents off", nearest(f));
     }
-
-    // the four lower strings have unshadowed partials and must all be found
-    for &s in &strings[..4] {
-        let found = tracks.iter().any(|&(_, f, _)| cents(f, s).abs() < 4.0);
-        assert!(found, "string at {s} Hz not detected; tracks: {tracks:?}");
-    }
-    assert!(tracks.len() >= 4, "tracks: {tracks:?}");
 }

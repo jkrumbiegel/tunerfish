@@ -1,15 +1,19 @@
 pub mod analyzer;
 pub mod engine;
 pub mod pitch;
+pub mod salience;
 pub mod tracker;
 
 use engine::{Engine, OUT_LEN};
 use std::ptr::{addr_of, addr_of_mut};
 
 const IN_CAP: usize = 16384;
+const SAL_CAP: usize = 1024;
 
 static mut IN_BUF: [f32; IN_CAP] = [0.0; IN_CAP];
 static mut OUT_BUF: [f32; OUT_LEN] = [0.0; OUT_LEN];
+static mut SAL_BUF: [f32; SAL_CAP] = [0.0; SAL_CAP];
+static mut SAL_N: usize = 0;
 static mut ENGINE: Option<Engine> = None;
 
 #[no_mangle]
@@ -37,6 +41,28 @@ pub extern "C" fn out_len() -> u32 {
     OUT_LEN as u32
 }
 
+/// The integrated salience map: `salience_len()` bins from `salience_f0_min()`
+/// spaced `salience_bin_cents()` apart, for drawing what the detector sees.
+#[no_mangle]
+pub extern "C" fn salience_ptr() -> *const f32 {
+    addr_of!(SAL_BUF) as *const f32
+}
+
+#[no_mangle]
+pub extern "C" fn salience_len() -> u32 {
+    unsafe { SAL_N as u32 }
+}
+
+#[no_mangle]
+pub extern "C" fn salience_f0_min() -> f32 {
+    salience::F0_MIN
+}
+
+#[no_mangle]
+pub extern "C" fn salience_bin_cents() -> f32 {
+    salience::BIN_CENTS
+}
+
 /// Process `n` samples previously written to `in_ptr()`. Returns the number
 /// of new analysis frames; if > 0, fresh results are at `out_ptr()`.
 #[no_mangle]
@@ -48,6 +74,11 @@ pub extern "C" fn push_samples(n: u32) -> u32 {
         let produced = engine.push(samples);
         if produced > 0 {
             engine.write_out(&mut *addr_of_mut!(OUT_BUF));
+            let map = engine.salience_map();
+            let sal = &mut *addr_of_mut!(SAL_BUF);
+            let n = map.len().min(SAL_CAP);
+            sal[..n].copy_from_slice(&map[..n]);
+            SAL_N = n;
         }
         produced as u32
     }

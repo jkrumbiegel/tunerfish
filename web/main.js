@@ -178,6 +178,8 @@ function draw() {
     ctx.fillText(noteName(m), 6 * dpr, y - 9 * dpr);
   }
 
+  drawSalience(ctx, w, h, dpr, yOf, xNow);
+
   // the pitch line
   ctx.strokeStyle = '#4ea1ff';
   ctx.lineWidth = 2.5 * dpr;
@@ -210,6 +212,29 @@ function draw() {
       ctx.fill();
     }
     drawReadout(ctx, w, dpr, nearMidi, offset, active);
+  }
+}
+
+// The integrated salience profile the detector works from, drawn as faint
+// bars in the right-hand lead strip so its alignment with the line is visible.
+function drawSalience(ctx, w, h, dpr, yOf, xNow) {
+  if (!wasm || typeof wasm.salience_ptr !== 'function') return;
+  const n = wasm.salience_len();
+  if (!n) return;
+  const sal = new Float32Array(wasm.memory.buffer, wasm.salience_ptr(), n);
+  const f0min = wasm.salience_f0_min();
+  const bc = wasm.salience_bin_cents();
+  let smax = 1e-9;
+  for (let k = 0; k < n; k++) if (sal[k] > smax) smax = sal[k];
+  const strip = w - xNow;
+  for (let k = 0; k < n; k++) {
+    const a = sal[k] / smax;
+    if (a < 0.06) continue;
+    const absCents = (k * bc) + 1200 * Math.log2(f0min / 440);
+    const y = yOf(absCents);
+    if (y < 0 || y > h) continue;
+    ctx.fillStyle = `rgba(78, 161, 255, ${(a * 0.4).toFixed(3)})`;
+    ctx.fillRect(xNow, y - dpr, a * strip, 2 * dpr);
   }
 }
 
