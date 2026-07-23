@@ -1,4 +1,4 @@
-const CACHE_NAME = 'tunerfish-v1';
+const CACHE_NAME = 'tunerfish-v2';
 const ASSETS = [
   './',
   './index.html',
