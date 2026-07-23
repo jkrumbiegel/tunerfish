@@ -358,4 +358,11 @@ if (new URLSearchParams(location.search).has('demo')) {
     statusEl.textContent = `Failed to load DSP module: ${err.message}`;
   });
 }
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('service-worker.js').catch(() => {});
+  });
+}
+
 requestAnimationFrame(draw);

@@ -44,3 +44,6 @@ cargo test        # native tests against synthesized plucks
 
 Open the printed `https://<lan-ip>:8443/` on the phone and accept the
 certificate warning once.
+
+The app can be installed from the browser's Add to Home Screen or Install
+action. After the first successful load, the tuner runs offline.
